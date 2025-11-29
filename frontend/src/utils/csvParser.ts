@@ -101,3 +101,93 @@ export const parseCsv = (content: string): CsvLead[] => {
 
   return data
 }
+
+export const parseCsvFile = (file: File): Promise<CsvLead[]> => {
+  return new Promise((resolve, reject) => {
+    Papa.parse<Record<string, string>>(file, {
+      header: true,
+      skipEmptyLines: true,
+      transform: (value) => value.trim(),
+      transformHeader: (header) => header.trim().toLowerCase(),
+      quoteChar: '"',
+      complete: (results) => {
+        if (results.errors.length > 0) {
+          const criticalErrors = results.errors.filter(
+            (error) => error.type === 'Delimiter' || error.type === 'Quotes' || error.type === 'FieldMismatch'
+          )
+          if (criticalErrors.length > 0) {
+            reject(new Error(`CSV parsing failed: ${criticalErrors[0].message}`))
+            return
+          }
+        }
+
+        if (!results.data || results.data.length === 0) {
+          reject(new Error('CSV file appears to be empty or contains no valid data'))
+          return
+        }
+
+        const data: CsvLead[] = []
+
+        results.data.forEach((row, index) => {
+          if (Object.values(row).every((value) => !value)) return
+
+          const lead: Partial<CsvLead> = { rowIndex: index + 2 }
+
+          Object.entries(row).forEach(([header, value]) => {
+            const normalizedHeader = header.toLowerCase().replace(/[^a-z]/g, '')
+            const trimmedValue = value?.trim() || ''
+
+            switch (normalizedHeader) {
+              case 'firstname':
+                lead.firstName = trimmedValue
+                break
+              case 'lastname':
+                lead.lastName = trimmedValue
+                break
+              case 'email':
+                lead.email = trimmedValue
+                break
+              case 'jobtitle':
+                lead.jobTitle = trimmedValue || undefined
+                break
+              case 'countrycode':
+                lead.countryCode = trimmedValue || undefined
+                break
+              case 'companyname':
+                lead.companyName = trimmedValue || undefined
+                break
+            }
+          })
+
+          const errors: string[] = []
+          if (!lead.firstName?.trim()) {
+            errors.push('First name is required')
+          }
+          if (!lead.lastName?.trim()) {
+            errors.push('Last name is required')
+          }
+          if (!lead.email?.trim()) {
+            errors.push('Email is required')
+          } else if (!isValidEmail(lead.email)) {
+            errors.push('Invalid email format')
+          }
+
+          data.push({
+            ...lead,
+            firstName: lead.firstName || '',
+            lastName: lead.lastName || '',
+            email: lead.email || '',
+            isValid: errors.length === 0,
+            errors,
+          } as CsvLead)
+        })
+
+        resolve(data)
+      },
+      error: (error) => {
+        reject(error)
+      },
+    })
+  })
+}
+

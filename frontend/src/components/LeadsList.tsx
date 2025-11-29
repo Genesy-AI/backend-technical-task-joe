@@ -17,15 +17,51 @@ export const LeadsList: FC = () => {
     queryFn: async () => api.leads.getMany(),
     retry: false,
   })
-  
+
+  const phoneLookupMutation = useMutation({
+    mutationFn: async (leadIds: number[]) => {
+      // Filter out leads that already have phone numbers
+      const leadsData = leads.data || []
+      const leadsToLookup = leadsData.filter(lead =>
+        leadIds.includes(lead.id) && !lead.phoneNumber
+      )
+
+      if (leadsToLookup.length === 0) {
+        toast('All selected leads already have phone numbers', { icon: 'ℹ️' })
+        return []
+      }
+
+      if (leadsToLookup.length < leadIds.length) {
+        const skipped = leadIds.length - leadsToLookup.length
+        toast(
+          `Skipping ${skipped} lead${skipped > 1 ? 's' : ''} with existing phone numbers`,
+          { icon: 'ℹ️' }
+        )
+      }
+
+      const results = await Promise.all(
+        leadsToLookup.map((lead) => api.leads.phoneLookup({ id: lead.id }))
+      )
+      return results
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['leads', 'getMany'] })
+      if (data && data.length > 0) {
+        toast.success(`Phone lookup completed for ${data.length} lead${data.length > 1 ? 's' : ''}`)
+      }
+    },
+    onError: () => {
+      toast.error('Failed to perform phone lookup. Please try again.')
+    }
+  })
 
   const deleteLeadsMutation = useMutation({
     mutationFn: async (ids: number[]) => api.leads.deleteMany({ ids }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['leads', 'getMany'] })
       setSelectedLeads([])
-      
-      const message = data.deletedCount === 1 
+
+      const message = data.deletedCount === 1
         ? `Successfully deleted ${data.deletedCount} lead`
         : `Successfully deleted ${data.deletedCount} leads`
       toast.success(message)
@@ -104,7 +140,7 @@ export const LeadsList: FC = () => {
                 {selectedLeads.length} selected
               </span>
             )}
-            
+
             <button
               onClick={() => setIsImportModalOpen(true)}
               className="inline-flex items-center px-3 py-2 border border-gray-300 text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
@@ -114,7 +150,7 @@ export const LeadsList: FC = () => {
               </svg>
               Import CSV
             </button>
-            
+
             <div className="relative">
               <button
                 onClick={() => selectedLeads.length > 0 && setIsEnrichDropdownOpen(!isEnrichDropdownOpen)}
@@ -172,6 +208,20 @@ export const LeadsList: FC = () => {
                         Guess Gender
                       </div>
                     </button>
+                    <button
+                      onClick={() => {
+                        phoneLookupMutation.mutate(selectedLeads)
+                        setIsEnrichDropdownOpen(false)
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center">
+                        <svg className="mr-3 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                        Find Phone
+                      </div>
+                    </button>
                   </div>
                 </div>
               )}
@@ -226,6 +276,9 @@ export const LeadsList: FC = () => {
                   Email
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Phone
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
                   Job Title
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
@@ -244,11 +297,10 @@ export const LeadsList: FC = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {!leads.isError && leads.data?.map((lead) => (
-                <tr 
-                  key={lead.id} 
-                  className={`hover:bg-gray-50 transition-colors ${
-                    selectedLeads.includes(lead.id) ? 'bg-blue-50' : ''
-                  }`}
+                <tr
+                  key={lead.id}
+                  className={`hover:bg-gray-50 transition-colors ${selectedLeads.includes(lead.id) ? 'bg-blue-50' : ''
+                    }`}
                 >
                   <td className="w-12 px-6 py-4">
                     <input
@@ -265,6 +317,9 @@ export const LeadsList: FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{lead.email || '-'} {lead.emailVerified === null ? '❓' : lead.emailVerified ? '✅' : '❌'}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{lead.phoneNumber || '-'}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">{lead.jobTitle || '-'}</div>
@@ -287,7 +342,7 @@ export const LeadsList: FC = () => {
               ))}
             </tbody>
           </table>
-          
+
           {leads.isError && (
             <div className="text-center py-12">
               <div className="bg-red-50 border border-red-200 rounded-lg p-6 mx-6">
@@ -306,7 +361,7 @@ export const LeadsList: FC = () => {
               </div>
             </div>
           )}
-          
+
           {!leads.isError && leads.data?.length === 0 && (
             <div className="text-center py-12">
               <div className="text-gray-500">

@@ -22,4 +22,5 @@ export const leadsApi = {
   ),
   bulkImport: endpoint<LeadsBulkImportOutput, LeadsBulkImportInput>('post', '/leads/bulk'),
   verifyEmails: endpoint<LeadsVerifyEmailsOutput, LeadsVerifyEmailsInput>('post', '/leads/verify-emails'),
+  phoneLookup: endpoint<{ success: boolean; phone: string }, { id: number }>('post', ({ id }) => `/leads/${id}/phone-lookup`),
 } as const satisfies ApiModule

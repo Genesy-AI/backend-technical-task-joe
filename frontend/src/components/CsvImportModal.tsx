@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { api } from '../api'
-import { CsvLead, parseCsv } from '../utils/csvParser'
+import { CsvLead, parseCsvFile } from '../utils/csvParser'
 
 interface CsvImportModalProps {
   isOpen: boolean
@@ -42,31 +42,22 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
     }
   }, [csvData])
 
-  const handleFileSelect = (file: File) => {
+  const handleFileSelect = async (file: File) => {
     if (!file.name.endsWith('.csv')) {
       toast.error('Please select a CSV file')
       return
     }
 
     setIsProcessing(true)
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const content = e.target?.result as string
-        const parsed = parseCsv(content)
-        setCsvData(parsed)
-        setIsProcessing(false)
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to parse CSV file'
-        toast.error(errorMessage)
-        setIsProcessing(false)
-      }
-    }
-    reader.onerror = () => {
-      toast.error('Error reading file')
+    try {
+      const parsed = await parseCsvFile(file)
+      setCsvData(parsed)
+      setIsProcessing(false)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to parse CSV file'
+      toast.error(errorMessage)
       setIsProcessing(false)
     }
-    reader.readAsText(file)
   }
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -192,9 +183,8 @@ export const CsvImportModal: FC<CsvImportModalProps> = ({ isOpen, onClose }) => 
         <div className="px-6 py-4">
           {csvData.length === 0 ? (
             <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                isDragging ? 'border-blue-400 bg-blue-50' : 'border-gray-300'
-              }`}
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${isDragging ? 'border-blue-400 bg-blue-50' : 'border-gray-300'
+                }`}
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}

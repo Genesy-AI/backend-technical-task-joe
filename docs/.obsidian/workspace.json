@@ -1,0 +1,205 @@
+{
+  "main": {
+    "id": "62259d35f10c7758",
+    "type": "split",
+    "children": [
+      {
+        "id": "d7906a68ba5da40a",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "706c1c89c7502844",
+            "type": "leaf",
+            "state": {
+              "type": "excalidraw",
+              "state": {
+                "file": "ui-wireframes.excalidraw"
+              },
+              "icon": "excalidraw-icon",
+              "title": "ui-wireframes"
+            }
+          },
+          {
+            "id": "a01e81b31e4fda00",
+            "type": "leaf",
+            "state": {
+              "type": "excalidraw",
+              "state": {
+                "file": "ui-admin-ideas.excalidraw.md"
+              },
+              "icon": "excalidraw-icon",
+              "title": "ui-admin-ideas.excalidraw"
+            }
+          }
+        ],
+        "currentTab": 1
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "21d9fa6925e04101",
+    "type": "split",
+    "children": [
+      {
+        "id": "b2725c1c43408137",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "949245f39ae4c545",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "103b364a9a313e9f",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "8865f2ff776e60e7",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 200
+  },
+  "right": {
+    "id": "e5a581c58ff92025",
+    "type": "split",
+    "children": [
+      {
+        "id": "b3c4a5b6f4c9e9ba",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "fefbf7edce86cef5",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "ui-wireframes.png",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for ui-wireframes"
+            }
+          },
+          {
+            "id": "53a6472e7f781bd2",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "ui-wireframes.png",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from ui-wireframes"
+            }
+          },
+          {
+            "id": "386e31e087af5797",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "3d3a91f622cefb04",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "075677b3d6a9b74d",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "ui-wireframes.png",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of ui-wireframes"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false,
+      "obsidian-excalidraw-plugin:New drawing": false
+    }
+  },
+  "active": "a01e81b31e4fda00",
+  "lastOpenFiles": [
+    "ui-wireframes.excalidraw",
+    "ui-admin-ideas.excalidraw.md",
+    "ui-wireframes.png",
+    "Untitled"
+  ]
+}

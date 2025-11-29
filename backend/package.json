@@ -13,15 +13,22 @@
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:ui": "vitest --ui",
+    "test:jest": "jest",
+    "test:jest:watch": "jest --watch",
+    "test:integration": "jest --testPathPattern=integration",
     "test:coverage": "vitest --coverage"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.18.1",
     "@vitest/ui": "^3.2.4",
+    "axios": "^1.13.2",
+    "jest": "^30.2.0",
     "nodemon": "^3.1.10",
     "prettier": "^3.6.2",
     "prisma": "^6.15.0",
+    "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
