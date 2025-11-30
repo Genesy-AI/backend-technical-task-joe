@@ -1,35 +1,42 @@
-import { QueuedRateLimiter } from '../../utils/QueuedRateLimiter'
+import { PhoneProvider } from '../../providers/PhoneProvider'
+import { ProviderConfig, LookupParams } from '../../types/ProviderConfig'
 import axios, { AxiosError } from 'axios'
 
-// Provider API configurations from README
-const ORION_CONFIG = {
-    baseUrl: 'https://api.genesy.ai/api/tmp/orionConnect',
-    authHeader: 'x-auth-me',
-    apiKey: 'mySecretKey123',
-    rateLimit: 5, // 5 req/sec
-    maxConcurrent: 3
-}
-
-const ASTRA_CONFIG = {
-    baseUrl: 'https://api.genesy.ai/api/tmp/astraDialer',
-    authHeader: 'apiKey',
-    apiKey: '1234jhgf',
-    rateLimit: 10, // 10 req/sec
-    maxConcurrent: 10
-}
-
-const NIMBUS_CONFIG = {
-    baseUrl: 'https://api.genesy.ai/api/tmp/numbusLookup',
-    apiParam: 'api',
-    apiKey: '000099998888',
-    rateLimit: 2, // 2 req/sec
-    maxConcurrent: 2
-}
-
-// Initialize rate limiters for each provider
-const orionLimiter = new QueuedRateLimiter(ORION_CONFIG.rateLimit, 1000, ORION_CONFIG.maxConcurrent)
-const astraLimiter = new QueuedRateLimiter(ASTRA_CONFIG.rateLimit, 1000, ASTRA_CONFIG.maxConcurrent)
-const nimbusLimiter = new QueuedRateLimiter(NIMBUS_CONFIG.rateLimit, 1000, NIMBUS_CONFIG.maxConcurrent)
+/**
+ * Provider configurations
+ */
+export const PROVIDER_CONFIGS: ProviderConfig[] = [
+    {
+        name: 'Orion Connect',
+        priority: 1,
+        costPerRequest: 0.02,
+        rateLimit: 5,
+        timeWindow: 1000,
+        maxConcurrent: 3,
+        enabled: true,
+        timeout: 10000
+    },
+    {
+        name: 'Astra Dialer',
+        priority: 2,
+        costPerRequest: 0.01,
+        rateLimit: 10,
+        timeWindow: 1000,
+        maxConcurrent: 10,
+        enabled: true,
+        timeout: 10000
+    },
+    {
+        name: 'Nimbus Lookup',
+        priority: 3,
+        costPerRequest: 0.015,
+        rateLimit: 2,
+        timeWindow: 1000,
+        maxConcurrent: 2,
+        enabled: true,
+        timeout: 10000
+    }
+]
 
 /**
  * Helper function to retry with exponential backoff
@@ -37,6 +44,7 @@ const nimbusLimiter = new QueuedRateLimiter(NIMBUS_CONFIG.rateLimit, 1000, NIMBU
 async function retryWithBackoff<T>(
     fn: () => Promise<T>,
     providerName: string,
+    leadIdentifier: string,
     maxRetries: number = 3
 ): Promise<T | null> {
     let lastError: Error | null = null
@@ -54,21 +62,20 @@ async function retryWithBackoff<T>(
 
                 // Don't retry on 4xx errors (client errors)
                 if (status && status >= 400 && status < 500) {
-                    console.log(`[${providerName}] ❌ Client error ${status} (${errorType}): ${errorMsg} - Not retrying`)
+                    console.log(`[${providerName}] ❌ [${leadIdentifier}] Client error ${status} (${errorType}): ${errorMsg} - Not retrying`)
                     return null
                 }
 
                 // Retry on 5xx errors (server errors) or network errors
                 if (attempt < maxRetries - 1) {
                     const backoffTime = Math.pow(2, attempt) * 1000 // 1s, 2s, 4s
-                    console.log(`[${providerName}] ⚠️  Error ${status || errorType} - "${errorMsg}" - Retrying in ${backoffTime / 1000}s (attempt ${attempt + 1}/${maxRetries})`)
+                    console.log(`[${providerName}] ⚠️  [${leadIdentifier}] Error ${status || errorType} - "${errorMsg}" - Retrying in ${backoffTime / 1000}s (attempt ${attempt + 1}/${maxRetries})`)
                     await new Promise(resolve => setTimeout(resolve, backoffTime))
                 } else {
-                    console.log(`[${providerName}] ❌ Failed after ${maxRetries} attempts - Last error: ${status || errorType}`)
+                    console.log(`[${providerName}] ❌ [${leadIdentifier}] Failed after ${maxRetries} attempts - Last error: ${status || errorType}`)
                 }
             } else {
-                // Non-axios error
-                console.log(`[${providerName}] ❌ Unexpected error: ${lastError?.message || 'Unknown'}`)
+                console.log(`[${providerName}] ❌ [${leadIdentifier}] Unexpected error: ${lastError?.message || 'Unknown'}`)
                 return null
             }
         }
@@ -78,115 +85,138 @@ async function retryWithBackoff<T>(
 }
 
 /**
- * Orion Connect - Best data, slow, sometimes fails
- * POST with fullName and companyWebsite
- * Auth: x-auth-me header
+ * Orion Connect Provider
+ * API: POST to /orionConnect with x-auth-me header
  */
-export async function searchProviderOne(fullName: string, companyWebsite: string): Promise<string | null> {
-    return orionLimiter.execute(async () => {
-        console.log(`[Orion Connect] 🔍 [${fullName}] Searching at ${companyWebsite}`)
+export class OrionProvider extends PhoneProvider {
+    private baseUrl = 'https://api.genesy.ai/api/tmp/orionConnect'
+    private authHeader = 'x-auth-me'
+    private apiKey = 'mySecretKey123'
 
-        const result = await retryWithBackoff(async () => {
-            const response = await axios.post(
-                ORION_CONFIG.baseUrl,
-                {
-                    fullName,
-                    companyWebsite
-                },
-                {
-                    headers: {
-                        [ORION_CONFIG.authHeader]: ORION_CONFIG.apiKey,
-                        'Content-Type': 'application/json'
+    constructor(config: ProviderConfig) {
+        super(config)
+    }
+
+    protected async lookup(params: LookupParams): Promise<string | null> {
+        const leadIdentifier = params.fullName
+
+        console.log(`[${this.config.name}] 🔍 [${leadIdentifier}] Searching at ${params.companyWebsite}`)
+
+        const result = await retryWithBackoff(
+            async () => {
+                const response = await axios.post(
+                    this.baseUrl,
+                    {
+                        fullName: params.fullName,
+                        companyWebsite: params.companyWebsite
                     },
-                    timeout: 10000
-                }
-            )
-
-            return response.data?.phone || null
-        }, `Orion Connect | ${fullName}`)
+                    {
+                        headers: { [this.authHeader]: this.apiKey },
+                        timeout: this.config.timeout
+                    }
+                )
+                return response.data?.phone || null
+            },
+            this.config.name,
+            leadIdentifier
+        )
 
         if (result) {
-            console.log(`[Orion Connect] ✅ [${fullName}] Found: ${result}`)
-            return result
+            console.log(`[${this.config.name}] ✅ [${leadIdentifier}] Found: ${result}`)
+        } else {
+            console.log(`[${this.config.name}] ⚪ [${leadIdentifier}] No data found, moving to next provider`)
         }
 
-        console.log(`[Orion Connect] ⚪ [${fullName}] No data found, moving to Astra Dialer`)
-        return null
-    })
+        return result
+    }
 }
 
 /**
- * Astra Dialer - Worst data, fastest
- * POST with email
- * Auth: apiKey header
+ * Astra Dialer Provider
+ * API: GET with apiKey query param
  */
-export async function searchProviderTwo(email: string): Promise<string | null> {
-    return astraLimiter.execute(async () => {
-        console.log(`[Astra Dialer] 🔍 [${email}] Searching...`)
+export class AstraProvider extends PhoneProvider {
+    private baseUrl = 'https://api.genesy.ai/api/tmp/astraDialer'
+    private apiKey = '1234jhgf'
 
-        const result = await retryWithBackoff(async () => {
-            const response = await axios.post(
-                ASTRA_CONFIG.baseUrl,
-                { email },
-                {
-                    headers: {
-                        [ASTRA_CONFIG.authHeader]: ASTRA_CONFIG.apiKey,
-                        'Content-Type': 'application/json'
+    constructor(config: ProviderConfig) {
+        super(config)
+    }
+
+    protected async lookup(params: LookupParams): Promise<string | null> {
+        const leadIdentifier = params.fullName
+
+        console.log(`[${this.config.name}] 🔍 [${leadIdentifier}] Searching at ${params.companyWebsite}`)
+
+        const result = await retryWithBackoff(
+            async () => {
+                const response = await axios.get(this.baseUrl, {
+                    params: {
+                        apiKey: this.apiKey,
+                        fullName: params.fullName,
+                        companyWebsite: params.companyWebsite
                     },
-                    timeout: 10000
-                }
-            )
-
-            return response.data?.phoneNmbr || null
-        }, `Astra Dialer | ${email}`)
+                    timeout: this.config.timeout
+                })
+                return response.data?.phoneNumber || null
+            },
+            this.config.name,
+            leadIdentifier
+        )
 
         if (result) {
-            console.log(`[Astra Dialer] ✅ [${email}] Found: ${result}`)
-            return result
+            console.log(`[${this.config.name}] ✅ [${leadIdentifier}] Found: ${result}`)
+        } else {
+            console.log(`[${this.config.name}] ⚪ [${leadIdentifier}] No data found, moving to next provider`)
         }
 
-        console.log(`[Astra Dialer] ⚪ [${email}] No data found, moving to Nimbus Lookup`)
-        return null
-    })
+        return result
+    }
 }
 
 /**
- * Nimbus Lookup - New provider
- * POST with email and jobTitle
- * Auth: api query parameter
+ * Nimbus Lookup Provider
+ * API: POST with api field in body
  */
-export async function searchProviderThree(email: string, jobTitle: string): Promise<string | null> {
-    return nimbusLimiter.execute(async () => {
-        console.log(`[Nimbus Lookup] 🔍 [${email}] Searching (${jobTitle})...`)
+export class NimbusProvider extends PhoneProvider {
+    private baseUrl = 'https://api.genesy.ai/api/tmp/numbusLookup'
+    private apiKey = '000099998888'
 
-        const result = await retryWithBackoff(async () => {
-            const response = await axios.post(
-                `${NIMBUS_CONFIG.baseUrl}?${NIMBUS_CONFIG.apiParam}=${NIMBUS_CONFIG.apiKey}`,
-                {
-                    email,
-                    jobTitle
-                },
-                {
-                    headers: {
-                        'Content-Type': 'application/json'
+    constructor(config: ProviderConfig) {
+        super(config)
+    }
+
+    protected async lookup(params: LookupParams): Promise<string | null> {
+        const leadIdentifier = params.fullName
+
+        console.log(`[${this.config.name}] 🔍 [${leadIdentifier}] Searching at ${params.companyWebsite}`)
+
+        const result = await retryWithBackoff(
+            async () => {
+                const response = await axios.post(
+                    this.baseUrl,
+                    {
+                        api: this.apiKey,
+                        fullName: params.fullName,
+                        companyWebsite: params.companyWebsite,
+                        jobTitle: params.jobTitle || 'Unknown'
                     },
-                    timeout: 10000
-                }
-            )
-
-            const data = response.data
-            if (data?.number && data?.countryCode) {
-                return `+${data.countryCode}${data.number}`
-            }
-            return null
-        }, `Nimbus Lookup | ${email}`)
+                    {
+                        timeout: this.config.timeout
+                    }
+                )
+                return response.data?.contact?.phone || null
+            },
+            this.config.name,
+            leadIdentifier
+        )
 
         if (result) {
-            console.log(`[Nimbus Lookup] ✅ [${email}] Found: ${result}`)
-            return result
+            console.log(`[${this.config.name}] ✅ [${leadIdentifier}] Found: ${result}`)
+        } else {
+            console.log(`[${this.config.name}] ⚪ [${leadIdentifier}] No data found, moving to next provider`)
         }
 
-        console.log(`[Nimbus Lookup] ⚪ [${email}] No data found - All providers exhausted, returning null`)
-        return null
-    })
+        return result
+    }
 }

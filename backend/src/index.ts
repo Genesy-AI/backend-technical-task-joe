@@ -363,23 +363,34 @@ app.post('/leads/:id/phone-lookup', async (req: Request, res: Response) => {
     // However, the user wants "Show process feedback".
     // Let's return the workflowId and handle polling or just wait if it's fast enough.
     // Given the "waterfall" nature, it might take a few seconds.
-    // Let's wait for the result for simplicity in this "take-home" context, 
-    // but typically we'd return 202 Accepted.
-
-    // Actually, the requirement says "Show process feedback".
-    // If I return immediately, the frontend can poll or just show "Processing".
-    // But to "Show process feedback" (e.g. "Checking Provider 1..."), we'd need a query or signal.
-    // For now, let's just wait for the result to keep it simple, as the providers are mocks and fast enough (max ~3s).
-
+    // but in production you'd want to make this async with webhooks/polling
     const result = await handle.result()
 
-    // Update lead with found phone number
-    await prisma.lead.update({
-      where: { id: lead.id },
-      data: { phoneNumber: result } as any, // Type assertion needed until Prisma client regenerates
-    })
+    // Update the lead with the phone number if found
+    if (result.phone) {
+      await prisma.lead.update({
+        where: { id: leadId },
+        data: {
+          phoneNumber: result.phone  // Only save the phone string
+        },
+      })
 
-    res.json({ success: true, phone: result })
+      console.log(`[Phone Lookup] Lead ${leadId} updated with phone: ${result.phone} from ${result.provider} (cost: $${result.cost})`)
+
+      res.json({
+        phone: result.phone,
+        provider: result.provider,
+        cost: result.cost,
+        skipped: false
+      })
+    } else {
+      console.log(`[Phone Lookup] No phone found for lead ${leadId}`)
+      res.json({
+        phone: null,
+        skipped: false,
+        message: 'No phone number found from any provider'
+      })
+    }
 
     await connection.close()
   } catch (error) {

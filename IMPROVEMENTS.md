@@ -1,6 +1,46 @@
 # TinyGenesy - Improvement Proposals
 
-> **Current architecture**: See [ARCHITECTURE.md](./ARCHITECTURE.md)
+## Overview
+This document outlines proposed improvements for scalability, maintainability, and performance.
+
+> **Note**: For current architecture documentation, see [ARCHITECTURE.md](./ARCHITECTURE.md)
+
+## 0. URGENT: Fix Current UX Issues
+
+### Problem
+- `/verify-emails` and `/phone-lookup` block HTTP requests until ALL operations complete
+- Frontend waits then refetches entire `/leads` list
+- No progress feedback (jane.smith email takes 20s!)
+- Inefficient - refetching all data after every operation
+
+### Immediate Action
+Implement async job processing with WebSocket updates:
+
+**Current Flow** (Bad):
+```
+User clicks "Verify 100 emails" → HTTP blocks for ~20s → Response → Refetch /leads
+```
+
+**New Flow** (Good):
+```
+User clicks → Backend returns jobId immediately → WebSocket updates per lead → No refetch
+```
+
+**Implementation**:
+1. Install Socket.IO (backend + frontend)
+2. Create job tracking (in-memory Map for now, Redis later)
+3. Update endpoints to return jobId
+4. Emit WebSocket events per lead completion
+5. Frontend updates individual table rows
+6. Add progress indicator: "Processing 45/100..."
+
+This fixes:
+- ✅ No more blocking HTTP requests
+- ✅ Real-time feedback
+- ✅ Handles 1000+ leads without timeouts
+- ✅ No unnecessary /leads refetches
+
+---
 
 ## 1. Distributed Rate Limiting with Job Persistence
 
