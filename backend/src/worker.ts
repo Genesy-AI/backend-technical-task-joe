@@ -15,13 +15,22 @@ export async function runTemporalWorker() {
       maxConcurrentActivityTaskExecutions: 10, // Rate limit: 10 concurrent emails
     })
 
-    const phoneWorker = await Worker.create({
+    const orionWorker = await Worker.create({
       connection,
       namespace: 'default',
-      taskQueue: 'phone-lookup-queue',
+      taskQueue: 'phone-verify-1', // Orion Queue
       workflowsPath: require.resolve('./workflows'),
       activities,
-      maxConcurrentActivityTaskExecutions: 10, // Rate limit: 10 concurrent phone lookups
+      maxConcurrentActivityTaskExecutions: 3, // Rate limit: 3 concurrent Orion lookups
+    })
+
+    const secondaryWorker = await Worker.create({
+      connection,
+      namespace: 'default',
+      taskQueue: 'phone-verify-2', // Secondary Queue
+      workflowsPath: require.resolve('./workflows'),
+      activities,
+      maxConcurrentActivityTaskExecutions: 10, // Rate limit: 10 concurrent secondary lookups
     })
 
     // Keep the original queue for backward compatibility or general tasks if needed
@@ -33,7 +42,7 @@ export async function runTemporalWorker() {
       activities,
     })
 
-    await Promise.all([emailWorker.run(), phoneWorker.run(), defaultWorker.run()])
+    await Promise.all([emailWorker.run(), orionWorker.run(), secondaryWorker.run(), defaultWorker.run()])
   } finally {
     await connection.close()
   }

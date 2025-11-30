@@ -1,11 +1,16 @@
 import { proxyActivities } from '@temporalio/workflow'
 import type * as activities from './activities'
 
-const { performPhoneLookup } = proxyActivities<typeof activities>({
+const orionActivities = proxyActivities<typeof activities>({
     startToCloseTimeout: '30 seconds',
-    retry: {
-        maximumAttempts: 1, // Retry logic handled in providers
-    },
+    taskQueue: 'phone-verify-1', // Orion Queue
+    retry: { maximumAttempts: 1 },
+})
+
+const secondaryActivities = proxyActivities<typeof activities>({
+    startToCloseTimeout: '30 seconds',
+    taskQueue: 'phone-verify-2', // Secondary Queue
+    retry: { maximumAttempts: 1 },
 })
 
 export interface PhoneLookupInput {
@@ -30,17 +35,21 @@ export async function phoneLookupWorkflow(input: PhoneLookupInput): Promise<Phon
     const fullName = `${input.firstName} ${input.lastName}`
     const companyWebsite = input.companyWebsite || 'example.com'
     const jobTitle = input.jobTitle || 'Unknown'
+    const params = { fullName, companyWebsite, jobTitle }
 
+    // 1. Try Orion (Priority 1)
     try {
-        const result = await performPhoneLookup({
-            fullName,
-            companyWebsite,
-            jobTitle
-        })
-
-        return result
+        const result = await orionActivities.lookupOrion(params)
+        if (result.phone) return result
     } catch (err) {
-        console.error('Phone lookup workflow failed:', err)
+        console.error('Orion lookup failed, trying secondary:', err)
+    }
+
+    // 2. Fallback to Secondary Providers
+    try {
+        return await secondaryActivities.lookupSecondary(params)
+    } catch (err) {
+        console.error('Secondary lookup failed:', err)
         return { phone: null }
     }
 }

@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import express, { Request, Response } from 'express'
 import { createServer } from 'http'
-import { Server } from 'socket.io'
+import { Server as SocketIOServer, Socket } from 'socket.io'
 import { ApolloServer } from '@apollo/server'
 import { startStandaloneServer } from '@apollo/server/standalone'
 import cors from 'cors'
@@ -18,12 +18,16 @@ const app = express()
 const httpServer = createServer(app)
 
 // Socket.IO setup
-const io = new Server(httpServer, {
+const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: 'http://localhost:5173', // Vite dev server
+    origin: '*',
     methods: ['GET', 'POST']
   }
 })
+
+// Initialize Socket Service
+const { socketService } = require('./utils/socketService')
+socketService.setIO(io)
 
 // Job tracker for async operations
 const jobTracker = new JobTracker()
@@ -31,7 +35,7 @@ const jobTracker = new JobTracker()
 // Make io available for async processing
 export const socketIO = io
 
-io.on('connection', (socket) => {
+io.on('connection', (socket: Socket) => {
   console.log(`[WebSocket] Client connected: ${socket.id}`)
 
   socket.on('subscribe-job', (jobId: string) => {
