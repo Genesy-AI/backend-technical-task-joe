@@ -19,15 +19,15 @@ type MutationsApi<T extends ApiModule> = {
 type ApiMutationsOptions = ReturnType<typeof apiMutationsOptions>
 type ApiMutationsOptionsLeaves<TApi extends ApiModule, TMut extends MutationsApi<TApi>> = {
   [K in keyof TMut & keyof TApi]: TApi[K] extends ApiModule
-    ? TMut[K] extends MutationsApi<TApi[K]>
-      ? ApiMutationsOptionsLeaves<TApi[K], TMut[K]>
-      : never
-    : true
+  ? TMut[K] extends MutationsApi<TApi[K]>
+  ? ApiMutationsOptionsLeaves<TApi[K], TMut[K]>
+  : never
+  : true
 }
 type Leaves<T> = T extends object
   ? {
-      [K in keyof T]: `${Exclude<K, symbol>}${Leaves<T[K]> extends never ? '' : `.${Leaves<T[K]>}`}`
-    }[keyof T]
+    [K in keyof T]: `${Exclude<K, symbol>}${Leaves<T[K]> extends never ? '' : `.${Leaves<T[K]>}`}`
+  }[keyof T]
   : never
 type ApiMutationsPaths = Leaves<ApiMutationsOptionsLeaves<typeof api, ApiMutationsOptions>>
 const makeOptions = <TData = unknown, TError = DefaultError, TVariables = void, TContext = unknown>(
@@ -69,6 +69,8 @@ const apiMutationsOptions = (queryClient: QueryClient) =>
             countryCode: null,
             companyName: null,
             message: null,
+            emailVerified: null,
+            phoneNumber: null,
             ...input,
           }
           const newLeads: ApiOutput<typeof api.leads.getMany> = [...(previousValue ?? []), newLead]

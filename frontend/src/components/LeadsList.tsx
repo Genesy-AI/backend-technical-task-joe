@@ -1,16 +1,32 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation as useGraphQLMutation } from '@apollo/client/react'
 import { FC, useState } from 'react'
 import toast from 'react-hot-toast'
 import { api } from '../api'
 import { MessageTemplateModal } from './MessageTemplateModal'
 import { CsvImportModal } from './CsvImportModal'
+import { socketManager } from '../utils/socketManager'
+import { ENRICH_LEADS } from '../apollo/client'
+
+interface EnrichLeadsData {
+  enrichLeads: {
+    jobId: string
+    totalLeads: number
+    operations: string[]
+  }
+}
 
 export const LeadsList: FC = () => {
   const [selectedLeads, setSelectedLeads] = useState<number[]>([])
   const [isMessageModalOpen, setIsMessageModalOpen] = useState(false)
   const [isEnrichDropdownOpen, setIsEnrichDropdownOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+
+  // Enrichment state
+  const [selectedOperations, setSelectedOperations] = useState<string[]>(['VERIFY_EMAIL', 'PHONE_LOOKUP'])
+
   const queryClient = useQueryClient()
+  const [enrichLeads] = useGraphQLMutation<EnrichLeadsData>(ENRICH_LEADS)
 
   const leads = useQuery({
     queryKey: ['leads', 'getMany'],
@@ -18,43 +34,78 @@ export const LeadsList: FC = () => {
     retry: false,
   })
 
-  const phoneLookupMutation = useMutation({
-    mutationFn: async (leadIds: number[]) => {
-      // Filter out leads that already have phone numbers
-      const leadsData = leads.data || []
-      const leadsToLookup = leadsData.filter(lead =>
-        leadIds.includes(lead.id) && !lead.phoneNumber
-      )
-
-      if (leadsToLookup.length === 0) {
-        toast('All selected leads already have phone numbers', { icon: 'ℹ️' })
-        return []
-      }
-
-      if (leadsToLookup.length < leadIds.length) {
-        const skipped = leadIds.length - leadsToLookup.length
-        toast(
-          `Skipping ${skipped} lead${skipped > 1 ? 's' : ''} with existing phone numbers`,
-          { icon: 'ℹ️' }
-        )
-      }
-
-      const results = await Promise.all(
-        leadsToLookup.map((lead) => api.leads.phoneLookup({ id: lead.id }))
-      )
-      return results
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['leads', 'getMany'] })
-      if (data && data.length > 0) {
-        toast.success(`Phone lookup completed for ${data.length} lead${data.length > 1 ? 's' : ''}`)
-      }
-    },
-    onError: () => {
-      toast.error('Failed to perform phone lookup. Please try again.')
+  const handleEnrichment = async () => {
+    if (selectedOperations.length === 0) {
+      toast.error('Please select at least one operation')
+      return
     }
-  })
 
+    try {
+      const result = await enrichLeads({
+        variables: {
+          leadIds: selectedLeads,
+          operations: selectedOperations
+        }
+      })
+
+      if (!result.data) {
+        throw new Error('No data returned from enrichment mutation')
+      }
+
+      const { jobId, totalLeads } = result.data.enrichLeads
+      const socket = socketManager.getSocket()
+
+      socket.emit('subscribe-job', jobId)
+      toast.success(`Enrichment started for ${totalLeads} leads`)
+      setIsEnrichDropdownOpen(false)
+
+      let processedCount = 0
+      const totalOps = totalLeads * selectedOperations.length
+
+      // Listen for operation completion
+      socket.on('operation-complete', ({ leadId, operation, data }: any) => {
+        processedCount++
+
+        // Update cache based on operation type
+        queryClient.setQueryData(['leads', 'getMany'], (old: any) => {
+          if (!old) return old
+          return old.map((lead: any) => {
+            if (lead.id !== leadId) return lead
+
+            if (operation === 'verify-email') {
+              return { ...lead, emailVerified: data.emailVerified }
+            }
+            if (operation === 'phone-lookup') {
+              return { ...lead, phoneNumber: data.phone }
+            }
+            return lead
+          })
+        })
+
+        if (processedCount % 5 === 0 || processedCount === totalOps) {
+          toast(`Progress: ${processedCount}/${totalOps} operations completed`)
+        }
+      })
+
+      socket.on('job-complete', () => {
+        toast.success('✅ Enrichment job completed!')
+        socket.off('operation-complete')
+        socket.off('job-complete')
+      })
+
+    } catch (error) {
+      console.error('Enrichment error:', error)
+      toast.error('Failed to start enrichment')
+    }
+  }
+
+  const toggleOperation = (op: string) => {
+    setSelectedOperations(prev =>
+      prev.includes(op) ? prev.filter(p => p !== op) : [...prev, op]
+    )
+  }
+
+  // Keep existing mutations for backwards compatibility / specific actions if needed
   const deleteLeadsMutation = useMutation({
     mutationFn: async (ids: number[]) => api.leads.deleteMany({ ids }),
     onSuccess: (data) => {
@@ -68,22 +119,6 @@ export const LeadsList: FC = () => {
     },
     onError: () => {
       toast.error('Failed to delete leads. Please try again.')
-    }
-  })
-
-  const verifyEmailsMutation = useMutation({
-    mutationFn: async (ids: number[]) => api.leads.verifyEmails({ leadIds: ids }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['leads', 'getMany'] })
-      setIsEnrichDropdownOpen(false)
-      toast.success(
-        data.verifiedCount === 1
-          ? `Verified ${data.verifiedCount} email`
-          : `Verified ${data.verifiedCount} emails`
-      )
-    },
-    onError: () => {
-      toast.error('Failed to verify emails. Please try again.')
     }
   })
 
@@ -167,60 +202,51 @@ export const LeadsList: FC = () => {
               </button>
 
               {isEnrichDropdownOpen && selectedLeads.length > 0 && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-50 border border-gray-200">
-                  <div className="py-1">
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg z-50 border border-gray-200 p-4">
+                  <h3 className="text-sm font-medium text-gray-900 mb-3">Select Operations</h3>
+
+                  <div className="space-y-2 mb-4">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded text-blue-600 focus:ring-blue-500"
+                        checked={selectedOperations.includes('VERIFY_EMAIL')}
+                        onChange={() => toggleOperation('VERIFY_EMAIL')}
+                      />
+                      <span className="text-sm text-gray-700">Verify Emails</span>
+                    </label>
+
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded text-blue-600 focus:ring-blue-500"
+                        checked={selectedOperations.includes('PHONE_LOOKUP')}
+                        onChange={() => toggleOperation('PHONE_LOOKUP')}
+                      />
+                      <span className="text-sm text-gray-700">Find Phones</span>
+                    </label>
+                  </div>
+
+                  <button
+                    onClick={handleEnrichment}
+                    disabled={selectedOperations.length === 0}
+                    className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Run Enrichment
+                  </button>
+
+                  <div className="mt-3 pt-3 border-t border-gray-100">
                     <button
                       onClick={() => {
                         setIsMessageModalOpen(true)
                         setIsEnrichDropdownOpen(false)
                       }}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                      className="w-full text-left text-sm text-gray-600 hover:text-gray-900 flex items-center"
                     >
-                      <div className="flex items-center">
-                        <svg className="mr-3 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
-                        Generate Messages
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => verifyEmailsMutation.mutate(selectedLeads)}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center">
-                        <svg className="mr-3 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12H8m8 0a8 8 0 11-16 0 8 8 0 0116 0zm-8 0V4" />
-                        </svg>
-                        Verify Email
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        toast.error('Gender guessing feature is not yet implemented')
-                        setIsEnrichDropdownOpen(false)
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center">
-                        <svg className="mr-3 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        Guess Gender
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        phoneLookupMutation.mutate(selectedLeads)
-                        setIsEnrichDropdownOpen(false)
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
-                    >
-                      <div className="flex items-center">
-                        <svg className="mr-3 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                        </svg>
-                        Find Phone
-                      </div>
+                      <svg className="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      Generate Messages
                     </button>
                   </div>
                 </div>

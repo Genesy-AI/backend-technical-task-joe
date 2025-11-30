@@ -6,7 +6,26 @@ export async function runTemporalWorker() {
     address: 'localhost:7233',
   })
   try {
-    const worker = await Worker.create({
+    const emailWorker = await Worker.create({
+      connection,
+      namespace: 'default',
+      taskQueue: 'email-verification-queue',
+      workflowsPath: require.resolve('./workflows'),
+      activities,
+      maxConcurrentActivityTaskExecutions: 10, // Rate limit: 10 concurrent emails
+    })
+
+    const phoneWorker = await Worker.create({
+      connection,
+      namespace: 'default',
+      taskQueue: 'phone-lookup-queue',
+      workflowsPath: require.resolve('./workflows'),
+      activities,
+      maxConcurrentActivityTaskExecutions: 10, // Rate limit: 10 concurrent phone lookups
+    })
+
+    // Keep the original queue for backward compatibility or general tasks if needed
+    const defaultWorker = await Worker.create({
       connection,
       namespace: 'default',
       taskQueue: 'myQueue',
@@ -14,7 +33,7 @@ export async function runTemporalWorker() {
       activities,
     })
 
-    await worker.run()
+    await Promise.all([emailWorker.run(), phoneWorker.run(), defaultWorker.run()])
   } finally {
     await connection.close()
   }

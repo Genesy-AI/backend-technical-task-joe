@@ -13,26 +13,13 @@
             "state": {
               "type": "excalidraw",
               "state": {
-                "file": "ui-wireframes.excalidraw"
-              },
-              "icon": "excalidraw-icon",
-              "title": "ui-wireframes"
-            }
-          },
-          {
-            "id": "a01e81b31e4fda00",
-            "type": "leaf",
-            "state": {
-              "type": "excalidraw",
-              "state": {
                 "file": "ui-admin-ideas.excalidraw.md"
               },
               "icon": "excalidraw-icon",
               "title": "ui-admin-ideas.excalidraw"
             }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "vertical"
@@ -89,7 +76,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 200
+    "width": 297.5
   },
   "right": {
     "id": "e5a581c58ff92025",
@@ -195,11 +182,13 @@
       "obsidian-excalidraw-plugin:New drawing": false
     }
   },
-  "active": "a01e81b31e4fda00",
+  "active": "706c1c89c7502844",
   "lastOpenFiles": [
     "ui-wireframes.excalidraw",
     "ui-admin-ideas.excalidraw.md",
     "ui-wireframes.png",
+    "test_contacts_50_ljfvu.csv",
+    "generate_test_contacts.py",
     "Untitled"
   ]
 }
